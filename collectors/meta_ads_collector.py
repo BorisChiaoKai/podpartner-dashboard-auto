@@ -12,7 +12,8 @@ import os
 import json
 from datetime import datetime, timedelta
 from facebook_business.api import FacebookAdsApi
-from facebook_business.objects import AdAccount, Campaign
+from facebook_business.adobjects.adaccount import AdAccount
+from facebook_business.adobjects.campaign import Campaign
 
 
 def collect():
