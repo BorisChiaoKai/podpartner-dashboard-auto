@@ -91,7 +91,6 @@ def collect():
             'clicks',
             'actions',  # Contains conversions/purchases
             'action_values',  # Contains purchase values
-            'action_types',
             'cpc',
             'cpm',
             'ctr'
@@ -102,8 +101,6 @@ def collect():
             fields=fields,
             params={
                 'level': 'campaign',
-                'date_start': start_date.isoformat(),
-                'date_end': end_date.isoformat(),
                 'time_range': {'since': start_date.isoformat(), 'until': end_date.isoformat()}
             }
         )
