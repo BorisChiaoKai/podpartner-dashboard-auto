@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PODpartner Social Listening Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg-primary: #0f1117; --bg-secondary: #1a1d28; --bg-card: #222538;
+    --bg-card-hover: #2a2e44; --accent: #6c5ce7; --accent-light: #a29bfe;
+    --positive: #00cec9; --negative: #ff7675; --neutral: #fdcb6e;
+    --text-primary: #f0f0f5; --text-secondary: #a0a3b5; --text-muted: #6c6f82;
+    --border: #2d3048; --shadow: 0 4px 24px rgba(0,0,0,0.3); --radius: 16px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:var(--bg-primary); color:var(--text-primary); min-height:100vh; }
+  ::-webkit-scrollbar { width:6px; } ::-webkit-scrollbar-track { background:var(--bg-primary); } ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+  .header { background:linear-gradient(135deg,var(--bg-secondary) 0%,#1e2235 100%); border-bottom:1px solid var(--border); padding:20px 40px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+  .header-left { display:flex; align-items:center; gap:16px; }
+  .logo { width:44px; height:44px; background:linear-gradient(135deg,var(--accent),var(--accent-light)); border-radius:12px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:18px; color:#fff; }
+  .header h1 { font-size:22px; font-weight:700; } .header h1 span { color:var(--accent-light); }
+  .header-right { display:flex; align-items:center; gap:16px; }
+  .report-date { background:var(--bg-card); padding:8px 16px; border-radius:10px; font-size:13px; color:var(--text-secondary); border:1px solid var(--border); }
+  .live-badge { display:flex; align-items:center; gap:6px; background:rgba(0,206,201,0.15); padding:6px 14px; border-radius:20px; font-size:12px; color:var(--positive); font-weight:600; }
+  .live-dot { width:8px; height:8px; background:var(--positive); border-radius:50%; animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:0.5;transform:scale(0.8);} }
+
+  .nav-tabs { display:flex; gap:4px; padding:12px 40px; background:var(--bg-secondary); border-bottom:1px solid var(--border); overflow-x:auto; }
+  .nav-tab { padding:10px 20px; border-radius:10px; font-size:13px; font-weight:500; color:var(--text-secondary); cursor:pointer; transition:all 0.2s; white-space:nowrap; border:none; background:none; }
+  .nav-tab:hover { background:var(--bg-card); color:var(--text-primary); }
+  .nav-tab.active { background:var(--accent); color:#fff; font-weight:600; }
+
+  .main { padding:24px 40px; max-width:1600px; margin:0 auto; }
+  .section { margin-bottom:32px; display:none; } .section.active { display:block; }
+  .section-title { font-size:18px; font-weight:700; margin-bottom:16px; display:flex; align-items:center; gap:10px; }
+  .section-title .icon { font-size:22px; }
+
+  .grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+  .grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  .grid-2 { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+  .grid-2-1 { display:grid; grid-template-columns:2fr 1fr; gap:16px; }
+
+  .card { background:var(--bg-card); border-radius:var(--radius); padding:24px; border:1px solid var(--border); transition:all 0.3s; }
+  .card:hover { border-color:var(--accent); transform:translateY(-2px); box-shadow:var(--shadow); }
+
+  .kpi-card { text-align:center; position:relative; overflow:hidden; }
+  .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,var(--accent),var(--accent-light)); }
+  .kpi-label { font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }
+  .kpi-value { font-size:36px; font-weight:800; background:linear-gradient(135deg,var(--text-primary),var(--accent-light)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; line-height:1.2; }
+  .kpi-change { font-size:12px; margin-top:6px; font-weight:600; }
+  .kpi-change.up { color:var(--positive); } .kpi-change.down { color:var(--negative); }
+
+  .sentiment-bar-container { margin-top:16px; }
+  .sentiment-bar { display:flex; height:12px; border-radius:6px; overflow:hidden; margin-bottom:8px; }
+  .sentiment-bar .positive { background:var(--positive); } .sentiment-bar .neutral { background:var(--neutral); } .sentiment-bar .negative { background:var(--negative); }
+  .sentiment-legend { display:flex; justify-content:space-between; font-size:11px; color:var(--text-secondary); }
+  .legend-item { display:flex; align-items:center; gap:4px; }
+  .legend-dot { width:8px; height:8px; border-radius:50%; }
+
+  .chart-container { position:relative; height:300px; width:100%; }
+  .chart-container-sm { position:relative; height:220px; width:100%; }
+
+  .comp-table { width:100%; border-collapse:collapse; }
+  .comp-table th { text-align:left; padding:12px 16px; font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid var(--border); }
+  .comp-table td { padding:14px 16px; font-size:13px; border-bottom:1px solid var(--border); }
+  .comp-table tr:hover td { background:var(--bg-card-hover); }
+  .comp-brand { display:flex; align-items:center; gap:10px; font-weight:600; }
+  .comp-logo { width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff; }
+  .score-badge { padding:4px 10px; border-radius:6px; font-size:12px; font-weight:600; }
+
+  .feedback-card { padding:16px; background:var(--bg-card); border-radius:12px; border:1px solid var(--border); margin-bottom:12px; transition:all 0.2s; }
+  .feedback-card:hover { border-color:var(--accent); }
+  .feedback-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .feedback-user { display:flex; align-items:center; gap:10px; }
+  .feedback-avatar { width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--accent-light)); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; color:#fff; }
+  .feedback-name { font-weight:600; font-size:13px; } .feedback-platform { font-size:11px; color:var(--text-muted); }
+  .feedback-date { font-size:11px; color:var(--text-muted); }
+  .feedback-text { font-size:13px; line-height:1.6; color:var(--text-secondary); margin-bottom:10px; }
+  .feedback-tags { display:flex; gap:6px; flex-wrap:wrap; }
+  .tag { padding:3px 10px; border-radius:20px; font-size:11px; font-weight:500; }
+  .tag-positive { background:rgba(0,206,201,0.15); color:var(--positive); }
+  .tag-negative { background:rgba(255,118,117,0.15); color:var(--negative); }
+  .tag-topic { background:rgba(108,92,231,0.15); color:var(--accent-light); }
+
+  .action-item { display:flex; gap:12px; padding:14px; background:var(--bg-card-hover); border-radius:10px; margin-bottom:10px; border-left:3px solid var(--accent); }
+  .action-priority { padding:2px 10px; border-radius:4px; font-size:11px; font-weight:600; white-space:nowrap; height:fit-content; }
+  .priority-high { background:rgba(255,118,117,0.2); color:var(--negative); }
+  .priority-medium { background:rgba(253,203,110,0.2); color:var(--neutral); }
+  .priority-low { background:rgba(0,206,201,0.2); color:var(--positive); }
+  .action-text { font-size:13px; line-height:1.5; } .action-source { font-size:11px; color:var(--text-muted); margin-top:4px; }
+
+  .filter-bar { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  .filter-btn { padding:6px 14px; border-radius:8px; font-size:12px; font-weight:500; color:var(--text-secondary); background:var(--bg-card); border:1px solid var(--border); cursor:pointer; transition:all 0.2s; }
+  .filter-btn:hover, .filter-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  .data-source-note { background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:20px; font-size:13px; color:var(--text-secondary); }
+  .data-source-note strong { color:var(--accent-light); }
+
+  .watermark { text-align:center; padding:24px; font-size:11px; color:var(--text-muted); border-top:1px solid var(--border); margin-top:40px; }
+
+  @media (max-width:1200px) { .grid-4 { grid-template-columns:repeat(2,1fr); } .grid-3 { grid-template-columns:repeat(2,1fr); } .grid-2-1 { grid-template-columns:1fr; } }
+  @media (max-width:768px) { .main { padding:16px; } .header { padding:16px; } .nav-tabs { padding:12px 16px; } .grid-4,.grid-3,.grid-2 { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-left">
+    <div class="logo">P</div>
+    <div>
+      <h1><span>PODpartner</span> Social Listening</h1>
+      <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Print-on-Demand Brand Intelligence Dashboard | Live Data</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge"><div class="live-dot"></div> LIVE DATA</div>
+    <div class="report-date">{{ report_date }}</div>
+  </div>
+</div>
+
+<div class="nav-tabs">
+  <button class="nav-tab active" data-tab="overview">Overview</button>
+  <button class="nav-tab" data-tab="sentiment">Sentiment</button>
+  <button class="nav-tab" data-tab="feedback">Key Feedback</button>
+  <button class="nav-tab" data-tab="topics">Topics</button>
+  <button class="nav-tab" data-tab="competitors">Competitors</button>
+  <button class="nav-tab" data-tab="trends">Google Trends</button>
+  <button class="nav-tab" data-tab="metaads">Meta Ads</button>
+  <button class="nav-tab" data-tab="actions">Actions</button>
+</div>
+
+<div class="main">
+  <div class="data-source-note">
+    <strong>Data Sources:</strong> {{ data_sources }}
+    | <strong>Last Updated:</strong> {{ report_date }}
+    | <strong>Coverage:</strong> Last 30 days
+    | To add more sources, configure API keys in <code>config.py</code>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="section active" id="overview">
+    <div class="grid-4" style="margin-bottom:24px;">
+      <div class="card kpi-card">
+        <div class="kpi-label">Social Mentions</div>
+        <div class="kpi-value">{{ total_mentions }}</div>
+        <div class="kpi-change {% if mentions_change > 0 %}up{% elif mentions_change < 0 %}down{% endif %}">{{ '%+.1f' | format(mentions_change) }}% vs last run</div>
+      </div>
+      <div class="card kpi-card">
+        <div class="kpi-label">Sentiment Score</div>
+        <div class="kpi-value">{{ sentiment_score }}</div>
+        <div class="kpi-change {% if sentiment_change > 0 %}up{% elif sentiment_change < 0 %}down{% endif %}">{{ '%+.3f' | format(sentiment_change) }} vs last run</div>
+      </div>
+      <div class="card kpi-card">
+        <div class="kpi-label">Mention Velocity</div>
+        <div class="kpi-value">{{ mention_velocity }}<span style="font-size:14px;opacity:0.6">/day</span></div>
+        <div class="kpi-change {% if velocity_change > 0 %}up{% elif velocity_change < 0 %}down{% endif %}">{{ '%+.1f' | format(velocity_change) }}% WoW</div>
+      </div>
+      <div class="card kpi-card">
+        <div class="kpi-label">Share of Voice</div>
+        <div class="kpi-value">{{ share_of_voice }}%</div>
+        <div class="kpi-change">vs 4 competitors</div>
+      </div>
+    </div>
+    <div class="grid-4" style="margin-bottom:24px;">
+      <div class="card kpi-card">
+        <div class="kpi-label">Positive %</div>
+        <div class="kpi-value" style="color:var(--positive);">{{ positive_pct }}%</div>
+        <div class="kpi-change up">{{ positive_count }} mentions</div>
+      </div>
+      <div class="card kpi-card">
+        <div class="kpi-label">Neutral %</div>
+        <div class="kpi-value" style="color:var(--neutral);">{{ neutral_pct }}%</div>
+        <div class="kpi-change">{{ neutral_count }} mentions</div>
+      </div>
+      <div class="card kpi-card">
+        <div class="kpi-label">Negative %</div>
+        <div class="kpi-value" style="color:var(--negative);">{{ negative_pct }}%</div>
+        <div class="kpi-change down">{{ negative_count }} mentions</div>
+      </div>
+      <div class="card kpi-card">
+        <div class="kpi-label">Action Items</div>
+        <div class="kpi-value">{{ action_items_count }}</div>
+        <div class="kpi-change">&#9888; {{ high_priority_count }} high priority</div>
+      </div>
+    </div>
+    <div class="grid-2-1">
+      <div class="card">
+        <div class="section-title"><span class="icon">📈</span> Mention Trend (30 Days)</div>
+        <div class="chart-container"><canvas id="mentionTrendChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="section-title"><span class="icon">🎯</span> Sentiment Overview</div>
+        <div class="chart-container"><canvas id="sentimentDonut"></canvas></div>
+        <div class="sentiment-bar-container" style="margin-top:16px;">
+          <div class="sentiment-bar">
+            <div class="positive" style="width:{{ positive_pct }}%"></div>
+            <div class="neutral" style="width:{{ neutral_pct }}%"></div>
+            <div class="negative" style="width:{{ negative_pct }}%"></div>
+          </div>
+          <div class="sentiment-legend">
+            <div class="legend-item"><div class="legend-dot" style="background:var(--positive)"></div> Positive {{ positive_pct }}%</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--neutral)"></div> Neutral {{ neutral_pct }}%</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--negative)"></div> Negative {{ negative_pct }}%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="grid-2" style="margin-top:16px;">
+      <div class="card">
+        <div class="section-title"><span class="icon">📊</span> Mentions by Platform</div>
+        <div class="chart-container-sm"><canvas id="platformBarChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="section-title"><span class="icon">📉</span> Sentiment Trajectory (30 Days)</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">Daily avg sentiment score (0-10 scale). Watch for sustained drops.</div>
+        <div class="chart-container-sm"><canvas id="sentimentTrajectoryChart"></canvas></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px;"><div class="section-title"><span class="icon">📜</span> Historical Runs</div><div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">Mentions and sentiment across past collection runs. Each point = one python3 run.py execution.</div><div class="chart-container"><canvas id="historyChart"></canvas></div></div>
+  </div>
+
+  <!-- SENTIMENT -->
+  <div class="section" id="sentiment">
+    <div class="section-title"><span class="icon">💬</span> Sentiment by Platform</div>
+    <div class="card">
+      <div class="chart-container"><canvas id="sentimentByPlatformChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- FEEDBACK -->
+  <div class="section" id="feedback">
+    <div class="section-title"><span class="icon">📝</span> Key User Feedback</div>
+    <div class="filter-bar">
+      <button class="filter-btn active" data-filter="all">All</button>
+      <button class="filter-btn" data-filter="positive">Positive</button>
+      <button class="filter-btn" data-filter="negative">Negative</button>
+    </div>
+    <div class="grid-2" id="feedbackContainer">
+      {% for fb in feedback_items %}
+      <div class="feedback-card" data-type="{{ fb.sentiment }}">
+        <div class="feedback-header">
+          <div class="feedback-user">
+            <div class="feedback-avatar">{{ fb.avatar }}</div>
+            <div>
+              <div class="feedback-name">{{ fb.name }}</div>
+              <div class="feedback-platform">{{ fb.platform }}</div>
+            </div>
+          </div>
+          <div class="feedback-date">{{ fb.date }}</div>
+        </div>
+        <div class="feedback-text">{{ fb.text }}</div>
+        <div class="feedback-tags">
+          <span class="tag tag-{% if fb.sentiment == 'positive' %}positive{% elif fb.sentiment == 'negative' %}negative{% else %}topic{% endif %}">{{ fb.sentiment | capitalize }}</span>
+          <span class="tag tag-topic">{{ fb.platform }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- TOPICS -->
+  <div class="section" id="topics">
+    <div class="section-title"><span class="icon">🏷️</span> Topics & Keywords</div>
+    <div class="card">
+      <div class="section-title" style="font-size:14px;margin-bottom:16px;"><span style="font-size:16px;">📊</span> Topic Volume & Sentiment</div>
+      <div class="chart-container"><canvas id="topicChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="section-title" style="font-size:14px;"><span style="font-size:16px;">💡</span> Topic Details</div>
+      {% for topic in topics %}
+      <div style="padding:16px;border-bottom:1px solid var(--border);{% if loop.last %}border-bottom:none;{% endif %}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <strong style="font-size:14px;">{{ topic.name }}</strong>
+          <span style="font-size:12px;background:rgba(108,92,231,0.2);padding:4px 10px;border-radius:4px;color:var(--accent-light);">{{ topic.mentions }} mentions</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">{{ topic.description }}</div>
+        <div style="display:flex;gap:12px;font-size:11px;">
+          <div style="display:flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;background:var(--positive);border-radius:2px;"></span> Positive: {{ topic.positive }}%</div>
+          <div style="display:flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;background:var(--neutral);border-radius:2px;"></span> Neutral: {{ topic.neutral }}%</div>
+          <div style="display:flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;background:var(--negative);border-radius:2px;"></span> Negative: {{ topic.negative }}%</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- COMPETITORS -->
+  <div class="section" id="competitors">
+    <div class="section-title"><span class="icon">🏆</span> Competitor Landscape</div>
+    <div class="card">
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th>Brand</th>
+            <th>Mentions</th>
+            <th>Sentiment Score</th>
+            <th>Trend</th>
+            <th>Positive %</th>
+            <th>Market Position</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for comp in competitors %}
+          <tr>
+            <td>
+              <div class="comp-brand">
+                <div class="comp-logo" style="background:{{ comp.color }};">{{ comp.logo }}</div>
+                {{ comp.name }}
+              </div>
+            </td>
+            <td>{{ comp.mentions }}</td>
+            <td>{{ comp.sentiment_score }}/10</td>
+            <td style="color:{% if comp.trend_change > 0 %}var(--positive){% elif comp.trend_change < 0 %}var(--negative){% else %}var(--text-muted){% endif %};">
+              {% if comp.trend_change > 0 %}↑{% elif comp.trend_change < 0 %}↓{% else %}→{% endif %} {{ '%+.1f' | format(comp.trend_change) }}%
+            </td>
+            <td>{{ comp.positive_pct }}%</td>
+            <td><span class="score-badge" style="background:{% if comp.market_position == 'Strong' %}rgba(0,206,201,0.2);color:var(--positive);{% elif comp.market_position == 'Moderate' %}rgba(253,203,110,0.2);color:var(--neutral);{% else %}rgba(255,118,117,0.2);color:var(--negative);{% endif %}">{{ comp.market_position }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- GOOGLE TRENDS -->
+  <div class="section" id="trends">
+    <div class="section-title"><span class="icon">📈</span> Google Trends Analysis</div>
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 style="font-size:14px;font-weight:600;">Search Trend Timeline</h3>
+        <span id="gtRangeLabel" style="font-size:12px;color:var(--text-muted);"></span>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:16px;">
+        <button class="filter-btn active" onclick="gtFilterAndRender('2026-01-03','2026-04-03')">3M</button>
+        <button class="filter-btn" onclick="gtFilterAndRender('2026-03-03','2026-04-03')">1M</button>
+        <button class="filter-btn" onclick="gtFilterAndRender('2026-03-24','2026-04-03')">1W</button>
+      </div>
+      <div class="chart-container" style="height:380px;"><canvas id="googleTrendsChart"></canvas></div>
+    </div>
+    <div class="grid-2" style="margin-bottom:16px;">
+      <div class="card">
+        <div style="font-size:14px;font-weight:600;margin-bottom:12px;">Average Search Volume</div>
+        <div id="gtKpiContainer" class="grid-2"></div>
+      </div>
+      <div class="card">
+        <div style="font-size:14px;font-weight:600;margin-bottom:12px;">Rising Search Queries</div>
+        <div style="font-size:12px;color:var(--text-secondary);max-height:280px;overflow-y:auto;">
+          {% for rising in gt_rising[:10] %}
+          <div style="padding:12px;border-bottom:1px solid var(--border);{% if loop.last %}border-bottom:none;{% endif %}">
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+              <strong style="font-size:11px;">{{ rising.query }}</strong>
+              <span style="color:var(--accent-light);font-weight:600;">+{{ rising.value }}</span>
+            </div>
+            <div style="font-size:10px;color:var(--text-muted);">{{ rising.parent }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- META ADS -->
+  <div class="section" id="metaads">
+    <div class="section-title"><span class="icon">💰</span> Meta Ads Performance</div>
+    <div class="grid-4" style="margin-bottom:24px;">
+      <div class="card kpi-card">
+        <div class="kpi-label">Total Spend</div>
+        <div class="kpi-value">${{ meta_total_spend }}</div>
+        <div class="kpi-change">Last 30 days</div>
+      </div>
+      <div class="card kpi-card">
+        <div class="kpi-label">Purchases</div>
+        <div class="kpi-value">{{ meta_purchases }}</div>
+        <div class="kpi-change">Conversions</div>
+      </div>
+      <div class="card kpi-card">
+        <div class="kpi-label">Cost Per Action</div>
+        <div class="kpi-value">${{ meta_cpa }}</div>
+        <div class="kpi-change">CPA Trend</div>
+      </div>
+      <div class="card kpi-card">
+        <div class="kpi-label">ROAS</div>
+        <div class="kpi-value">{{ meta_roas }}x</div>
+        <div class="kpi-change">Return on Ad Spend</div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="section-title" style="font-size:14px;"><span style="font-size:16px;">📊</span> Daily Spend Trend</div>
+      <div class="chart-container"><canvas id="metaSpendChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="section-title" style="font-size:14px;"><span style="font-size:16px;">🎯</span> Campaign Performance</div>
+      <table class="comp-table" style="margin-bottom:0;">
+        <thead>
+          <tr>
+            <th>Campaign</th>
+            <th>Spend</th>
+            <th>Impressions</th>
+            <th>Clicks</th>
+            <th>CTR</th>
+            <th>Conversions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for campaign in meta_campaigns %}
+          <tr>
+            <td><strong>{{ campaign.name }}</strong></td>
+            <td>${{ campaign.spend }}</td>
+            <td>{{ campaign.impressions }}</td>
+            <td>{{ campaign.clicks }}</td>
+            <td>{{ campaign.ctr }}%</td>
+            <td>{{ campaign.conversions }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ACTIONS -->
+  <div class="section" id="actions">
+    <div class="section-title"><span class="icon">⚡</span> Action Items & Recommendations</div>
+    <div class="card">
+      {% for action in action_items %}
+      <div class="action-item">
+        <div><div class="action-priority priority-{% if action.priority == 'P1' %}high{% elif action.priority == 'P2' %}medium{% else %}low{% endif %}">{{ action.priority }}</div></div>
+        <div>
+          <div class="action-text">{% if action.title %}<strong>{{ action.title }}</strong><br>{% endif %}{{ action.text }}</div>
+          <div class="action-source">Source: {{ action.source }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+
+<div class="watermark">
+  PODpartner Social Listening Dashboard | Generated: {{ report_date }} | Data auto-collected via Python
+</div>
+
+<script>
+document.querySelectorAll('.nav-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.tab).classList.add('active');
+  });
+});
+
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const section = btn.closest('.section');
+    if (section && section.querySelector('.feedback-card')) {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const filter = btn.dataset.filter;
+      document.querySelectorAll('.feedback-card').forEach(card => {
+        if (filter === 'all') card.style.display = '';
+        else card.style.display = card.dataset.type.includes(filter) ? '' : 'none';
+      });
+    }
+  });
+});
+
+Chart.defaults.color = '#a0a3b5';
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+const gridColor = 'rgba(45,48,72,0.6)';
+
+new Chart(document.getElementById('mentionTrendChart'), {
+  type:'line', data:{ labels:{{ mention_trend_labels | tojson }}, datasets:[{
+    label:'Mentions', data:{{ mention_trend_data | tojson }},
+    borderColor:'#6c5ce7', backgroundColor:'rgba(108,92,231,0.1)', fill:true, tension:0.4, pointRadius:2, borderWidth:2
+  }] },
+  options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{grid:{color:gridColor},ticks:{maxTicksLimit:8,font:{size:10}}}, y:{grid:{color:gridColor},beginAtZero:true} }, plugins:{legend:{display:false}} }
+});
+
+const stFiltered = {{ sentiment_trajectory_data | tojson }}.map(v => v === null ? undefined : v);
+if (document.getElementById('sentimentTrajectoryChart')) {
+  new Chart(document.getElementById('sentimentTrajectoryChart'), {
+    type:'line', data:{ labels:{{ mention_trend_labels | tojson }}, datasets:[{
+      label:'Sentiment', data:stFiltered,
+      borderColor:'#00cec9', backgroundColor:'rgba(0,206,201,0.1)', fill:true, tension:0.4, pointRadius:2, borderWidth:2, spanGaps:true
+    }] },
+    options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{grid:{color:gridColor},ticks:{maxTicksLimit:8,font:{size:10}}}, y:{grid:{color:gridColor},min:0,max:10,title:{display:true,text:'Score',font:{size:10},color:'#a0a3b5'}} }, plugins:{legend:{display:false},annotation:{} } }
+  });
+}
+
+const histLabels = {{ history_labels | tojson }};
+if (document.getElementById('historyChart') && histLabels.length > 1) {
+  new Chart(document.getElementById('historyChart'), {
+    type:'line', data:{ labels:histLabels, datasets:[
+      { label:'Mentions', data:{{ history_mentions | tojson }}, borderColor:'#6c5ce7', backgroundColor:'rgba(108,92,231,0.1)', fill:true, tension:0.3, yAxisID:'y', borderWidth:2 },
+      { label:'Positive %', data:{{ history_positive_pct | tojson }}, borderColor:'#00cec9', backgroundColor:'rgba(0,206,201,0.1)', fill:false, tension:0.3, yAxisID:'y1', borderWidth:2, borderDash:[5,5] }
+    ] },
+    options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+      scales:{
+        x:{grid:{color:gridColor},ticks:{font:{size:10}}},
+        y:{type:'linear',position:'left',grid:{color:gridColor},title:{display:true,text:'Mentions',font:{size:10},color:'#a0a3b5'}},
+        y1:{type:'linear',position:'right',grid:{drawOnChartArea:false},min:0,max:100,title:{display:true,text:'Positive %',font:{size:10},color:'#a0a3b5'}}
+      },
+      plugins:{legend:{position:'bottom',labels:{padding:12,font:{size:11}}}}
+    }
+  });
+}
+
+new Chart(document.getElementById('sentimentDonut'), {
+  type:'doughnut', data:{ labels:['Positive','Neutral','Negative'], datasets:[{
+    data:[{{ positive_pct }},{{ neutral_pct }},{{ negative_pct }}], backgroundColor:['#00cec9','#fdcb6e','#ff7675'], borderWidth:0, cutout:'72%'
+  }] },
+  options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{padding:12,font:{size:11}}}} }
+});
+
+new Chart(document.getElementById('platformBarChart'), {
+  type:'bar', data:{ labels:{{ platform_labels | tojson }}, datasets:[{
+    label:'Mentions', data:{{ platform_data | tojson }}, backgroundColor:{{ platform_colors | tojson }}, borderRadius:8, borderSkipped:false
+  }] },
+  options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y', scales:{ x:{grid:{color:gridColor}}, y:{grid:{display:false}} }, plugins:{legend:{display:false}} }
+});
+
+new Chart(document.getElementById('sentimentByPlatformChart'), {
+  type:'bar', data:{ labels:{{ sentiment_platform_labels | tojson }}, datasets:[
+    {label:'Positive', data:{{ sentiment_platform_positive | tojson }}, backgroundColor:'#00cec9', borderRadius:4},
+    {label:'Neutral', data:{{ sentiment_platform_neutral | tojson }}, backgroundColor:'#fdcb6e', borderRadius:4},
+    {label:'Negative', data:{{ sentiment_platform_negative | tojson }}, backgroundColor:'#ff7675', borderRadius:4}
+  ] },
+  options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{stacked:true,grid:{display:false}}, y:{stacked:true,grid:{color:gridColor},max:100} }, plugins:{legend:{position:'bottom'}} }
+});
+
+new Chart(document.getElementById('topicChart'), {
+  type:'bar', data:{ labels:{{ topic_labels | tojson }}, datasets:[{
+    label:'Mentions', data:{{ topic_data | tojson }},
+    backgroundColor:'#6c5ce7', borderRadius:8, borderSkipped:false
+  }] },
+  options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{grid:{display:false}}, y:{grid:{color:gridColor}} }, plugins:{legend:{display:false}} }
+});
+
+// ========================================
+// Google Trends - Interactive Time Range
+// ========================================
+const GT_RAW = {{ gt_raw | tojson }};
+const GT_RISING = {{ gt_rising | tojson }};
+let gtLineChart = null;
+let gtBarChart = null;
+
+function gtFilterData(startDate, endDate) {
+  const dates = GT_RAW.dates;
+  const keywords = GT_RAW.keywords;
+  if (!dates || !dates.length) return null;
+
+  let startIdx = 0, endIdx = dates.length - 1;
+  if (startDate) {
+    startIdx = dates.findIndex(d => d >= startDate);
+    if (startIdx < 0) startIdx = 0;
+  }
+  if (endDate) {
+    for (let i = dates.length - 1; i >= 0; i--) {
+      if (dates[i] <= endDate) { endIdx = i; break; }
+    }
+  }
+
+  const filteredDates = dates.slice(startIdx, endIdx + 1);
+  const filteredKw = keywords.map(kw => ({
+    ...kw,
+    values: kw.values.slice(startIdx, endIdx + 1),
+  }));
+  return { dates: filteredDates, keywords: filteredKw };
+}
+
+function gtCalcStats(values) {
+  if (!values.length) return { avg:0, latest:0, peak:0, change:0, dir:'flat', pts:0 };
+  const avg = Math.round(values.reduce((a,b)=>a+b,0) / values.length * 10) / 10;
+  const latest = values[values.length - 1];
+  const peak = Math.max(...values);
+  const q = Math.max(1, Math.floor(values.length / 4));
+  const q1Avg = values.slice(0, q).reduce((a,b)=>a+b,0) / q;
+  const q4Avg = values.slice(-q).reduce((a,b)=>a+b,0) / q;
+  const change = Math.round((q4Avg - q1Avg) / Math.max(q1Avg, 1) * 1000) / 10;
+  const dir = change > 5 ? 'up' : change < -5 ? 'down' : 'flat';
+  return { avg, latest, peak, change, dir, pts: values.length };
+}
+
+function gtFilterAndRender(startDate, endDate) {
+  const filtered = gtFilterData(startDate, endDate);
+  gtRender(filtered);
+  const btns = document.querySelectorAll('#trends .filter-btn');
+  btns.forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+function gtRender(filtered) {
+  if (!filtered || !filtered.dates.length) return;
+  const labels = filtered.dates.map(d => d.substring(5));
+
+  const kpiC = document.getElementById('gtKpiContainer');
+  if (kpiC) {
+    kpiC.innerHTML = '';
+    filtered.keywords.forEach(kw => {
+      const s = gtCalcStats(kw.values);
+      const arrow = s.dir === 'up' ? '&#9650;' : s.dir === 'down' ? '&#9660;' : '&#9654;';
+      const cls = s.dir === 'up' ? 'up' : s.dir === 'down' ? 'down' : '';
+      const sign = s.change > 0 ? '+' : '';
+      kpiC.innerHTML += `<div class="card kpi-card" style="border-top:3px solid ${kw.color};">
+        <div class="kpi-label" style="color:${kw.color};">${kw.name}</div>
+        <div class="kpi-value" style="background:linear-gradient(135deg,${kw.color},${kw.color}cc);-webkit-background-clip:text;">${s.latest}</div>
+        <div class="kpi-change ${cls}">${arrow} ${sign}${s.change}% trend</div>
+        <div style="margin-top:8px;font-size:11px;color:var(--text-muted);">Avg: ${s.avg} | Peak: ${s.peak}</div>
+      </div>`;
+    });
+  }
+
+  const rangeLabel = document.getElementById('gtRangeLabel');
+  if (rangeLabel) {
+    rangeLabel.textContent = filtered.dates[0] + ' ~ ' + filtered.dates[filtered.dates.length - 1] + ' (' + filtered.dates.length + ' data points)';
+  }
+
+  if (gtLineChart) gtLineChart.destroy();
+  const datasets = filtered.keywords.map(kw => ({
+    label: kw.name, data: kw.values,
+    borderColor: kw.color, backgroundColor: kw.color + '22',
+    fill: true, tension: 0.3, pointRadius: 2, borderWidth: 2
+  }));
+  gtLineChart = new Chart(document.getElementById('googleTrendsChart'), {
+    type: 'line',
+    data: { labels: labels, datasets: datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { x: { grid: { color: gridColor }, ticks: { maxTicksLimit: 12, font: { size: 10 } } }, y: { grid: { color: gridColor }, beginAtZero: true } },
+      plugins: { legend: { position: 'bottom', labels: { padding: 12, font: { size: 11 } } } }
+    }
+  });
+}
+
+gtRender(gtFilterData('2026-01-03', '2026-04-03'));
+
+const META_DAILY = {{ meta_daily | tojson }};
+const META_CAMPAIGNS = {{ meta_campaigns | tojson }};
+
+if (META_DAILY && META_DAILY.length > 0) {
+  const metaCtx = document.getElementById('metaSpendChart');
+  if (metaCtx) {
+    new Chart(metaCtx, {
+      type: 'bar',
+      data: {
+        labels: META_DAILY.map(d => d.date),
+        datasets: [
+          {
+            label: 'Daily Spend ($)',
+            data: META_DAILY.map(d => d.spend),
+            backgroundColor: 'rgba(59,130,246,0.5)',
+            borderColor: '#3B82F6',
+            borderWidth: 1,
+            borderRadius: 4,
+            yAxisID: 'y',
+            order: 2,
+          },
+          {
+            label: 'Purchases',
+            data: META_DAILY.map(d => d.purchases),
+            type: 'line',
+            borderColor: '#22C55E',
+            backgroundColor: 'rgba(34,197,94,0.1)',
+            borderWidth: 2,
+            pointRadius: 3,
+            fill: true,
+            yAxisID: 'y1',
+            order: 1,
+          },
+          {
+            label: 'Clicks',
+            data: META_DAILY.map(d => d.clicks),
+            type: 'line',
+            borderColor: '#F97316',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            borderDash: [4, 4],
+            yAxisID: 'y1',
+            order: 1,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { maxTicksLimit: 15 } },
+          y: { position: 'left', grid: { color: gridColor }, title: { display: true, text: 'Spend ($)', color: '#3B82F6' } },
+          y1: { position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Purchases / Clicks', color: '#22C55E' } }
+        },
+        plugins: { legend: { position: 'top', labels: { boxWidth: 12, usePointStyle: true } } }
+      }
+    });
+  }
+}
+
+if (META_CAMPAIGNS && META_CAMPAIGNS.length > 0) {
+  const tbody = document.getElementById('metaCampaignTable');
+  if (tbody) {
+    const sorted = [...META_CAMPAIGNS].sort((a, b) => b.spend - a.spend);
+    sorted.forEach(c => {
+      const roasColor = c.roas >= 3 ? '#22C55E' : c.roas >= 1 ? '#F59E0B' : '#EF4444';
+      tbody.innerHTML += `<tr>
+        <td style="font-weight:500;">${c.campaign_name}</td>
+        <td>${c.spend.toFixed(2)}</td>
+        <td>${c.impressions.toLocaleString()}</td>
+        <td>${c.clicks.toLocaleString()}</td>
+        <td>${c.ctr.toFixed(2)}%</td>
+        <td>${c.cpc.toFixed(2)}</td>
+        <td>${c.purchases}</td>
+        <td>${c.cost_per_purchase.toFixed(2)}</td>
+        <td style="color:${roasColor}; font-weight:600;">${c.roas.toFixed(2)}x</td>
+      </tr>`;
+    });
+  }
+}
+</script>
+</body>
+</html>
