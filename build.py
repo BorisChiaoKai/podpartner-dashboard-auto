@@ -416,6 +416,12 @@ class DashboardBuilder:
 
             # Competitors
             "competitors": competitors_data,
+
+            # Raw arrays for client-side rendering (new bilingual template)
+            "_raw_mentions": all_mentions,
+            "_raw_meta_daily": meta_data["daily"],
+            "_raw_meta_campaigns": meta_data["campaigns"],
+            "_raw_history": self.load_history(),
         }
 
         return dashboard_data
@@ -794,12 +800,31 @@ class DashboardBuilder:
         }
 
     def render_template(self, dashboard_data: Dict, template_name: str = "dashboard.html"):
-        """Render Jinja2 template with dashboard data"""
+        """Render Jinja2 template with dashboard data.
+
+        The new bilingual template expects two variables:
+        - raw_json_data: a JSON string with all data for client-side rendering
+        - report_date: display string for the header
+        """
         try:
             env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
             template = env.get_template(template_name)
 
-            html_content = template.render(**dashboard_data)
+            # Build the raw JSON blob the client-side DashboardEngine needs
+            raw_data = {
+                "report_date": self.report_date.strftime("%Y-%m-%d %H:%M:%S"),
+                "mentions": dashboard_data.get("_raw_mentions", []),
+                "meta_daily": dashboard_data.get("_raw_meta_daily", []),
+                "meta_campaigns": dashboard_data.get("_raw_meta_campaigns", []),
+                "history": dashboard_data.get("_raw_history", []),
+                "competitors": COMPETITORS,
+                "keywords": KEYWORDS,
+            }
+
+            html_content = template.render(
+                raw_json_data=json.dumps(raw_data, default=str),
+                report_date=self.report_date.strftime("%Y-%m-%d %H:%M:%S"),
+            )
 
             # Ensure output directory exists
             Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
