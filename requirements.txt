@@ -1,36 +1,35 @@
 # Dashboard Auto-Update Pipeline Requirements
 
 # Templating
-Jinja2==3.1.2
+Jinja2>=3.1.2
 
 # Reddit API
-praw==7.7.0
+praw>=7.7.0
 
 # Sentiment Analysis
-TextBlob==0.17.1
+TextBlob>=0.17.1
 
 # Google Trends (unofficial)
-pytrends==4.10.0
+pytrends>=4.9.0
 
 # Meta/Facebook API
-facebook-business==20.0.0
+facebook-business>=20.0.0
 
 # Google APIs (YouTube)
-google-api-python-client==2.100.0
+google-api-python-client>=2.100.0
 
 # HTTP requests
-requests==2.31.0
-urllib3==2.1.0
+requests>=2.31.0
 
 # Web scraping
-beautifulsoup4==4.12.2
-lxml==4.9.3
+beautifulsoup4>=4.12.2
+lxml>=4.9.3
 
 # Netlify deployment
-requests-toolbelt==1.0.0
+requests-toolbelt>=1.0.0
 
 # Data processing
-python-dateutil==2.8.2
+python-dateutil>=2.8.2
 
 # Utilities
-python-dotenv==1.0.0
+python-dotenv>=1.0.0
