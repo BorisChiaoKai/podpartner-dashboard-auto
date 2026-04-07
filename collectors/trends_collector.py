@@ -12,6 +12,24 @@ If authentication fails, consider using selenium-based scraping as fallback.
 
 import os
 from datetime import datetime, timedelta
+
+# --- urllib3 v2+ compatibility shim for pytrends ---
+# pytrends passes deprecated `method_whitelist` to urllib3.util.retry.Retry;
+# urllib3 >=2.0 renamed it to `allowed_methods` and removed the old kwarg.
+try:
+    from urllib3.util.retry import Retry as _Retry
+    _orig_init = _Retry.__init__
+
+    def _patched_init(self, *args, **kwargs):
+        if "method_whitelist" in kwargs:
+            kwargs["allowed_methods"] = kwargs.pop("method_whitelist")
+        return _orig_init(self, *args, **kwargs)
+
+    _Retry.__init__ = _patched_init
+except Exception:
+    pass  # If urllib3 < 2 or anything else, no patch needed
+# --- end shim ---
+
 from pytrends.request import TrendReq
 
 
