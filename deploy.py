@@ -134,14 +134,15 @@ class NetlifyDeployer:
             site_resp = requests.get(site_url, headers=self._get_headers())
             site_resp.raise_for_status()
 
-            # Create a new deploy
+            # Create a new deploy — Netlify requires application/zip body, not multipart
             deploy_url = f"{self.api_base}/sites/{self.site_id}/deploys"
 
             with open(zip_path, "rb") as f:
-                files = {"file": f}
-                headers = {"Authorization": f"Bearer {self.auth_token}"}
-
-                deploy_resp = requests.post(deploy_url, files=files, headers=headers)
+                headers = {
+                    "Authorization": f"Bearer {self.auth_token}",
+                    "Content-Type": "application/zip",
+                }
+                deploy_resp = requests.post(deploy_url, data=f, headers=headers)
                 deploy_resp.raise_for_status()
 
             deploy_data = deploy_resp.json()
