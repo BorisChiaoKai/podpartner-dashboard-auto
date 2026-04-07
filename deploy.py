@@ -85,24 +85,62 @@ class NetlifyDeployer:
             return None
 
     def deploy_using_api(self) -> Optional[str]:
-        """Deploy using Netlify API (direct method)"""
+        """Deploy using Netlify file-digest API (reliable method)"""
         try:
-            logger.info("Deploying using Netlify API...")
+            import hashlib
+
+            logger.info("Deploying using Netlify API (file digest)...")
 
             if not os.path.exists(self.output_dir):
                 raise FileNotFoundError(f"Output directory not found: {self.output_dir}")
 
-            # Create a zip file of the output directory
-            zip_path = self._create_deployment_zip()
+            # Build file manifest: { "/path": sha1_hash }
+            files = {}
+            file_contents = {}
+            output_path = Path(self.output_dir)
 
-            # Upload to Netlify
-            deploy_url = self._upload_to_netlify(zip_path)
+            for file_path in output_path.rglob("*"):
+                if file_path.is_file():
+                    rel_path = "/" + str(file_path.relative_to(output_path))
+                    content = file_path.read_bytes()
+                    sha1 = hashlib.sha1(content).hexdigest()
+                    files[rel_path] = sha1
+                    file_contents[sha1] = (rel_path, content)
 
-            # Clean up zip file
-            if os.path.exists(zip_path):
-                os.remove(zip_path)
+            logger.info(f"Deploying {len(files)} files: {list(files.keys())}")
 
-            return deploy_url
+            # Step 1: Create deploy with file digests
+            deploy_url = f"{self.api_base}/sites/{self.site_id}/deploys"
+            headers = {
+                "Authorization": f"Bearer {self.auth_token}",
+                "Content-Type": "application/json",
+            }
+            body = {"files": files}
+            deploy_resp = requests.post(deploy_url, headers=headers, json=body)
+            deploy_resp.raise_for_status()
+            deploy_data = deploy_resp.json()
+            deploy_id = deploy_data.get("id")
+
+            logger.info(f"Deploy created with ID: {deploy_id}")
+
+            # Step 2: Upload any required files
+            required = deploy_data.get("required", [])
+            logger.info(f"Netlify requires {len(required)} file uploads")
+
+            for sha1 in required:
+                if sha1 in file_contents:
+                    rel_path, content = file_contents[sha1]
+                    upload_url = f"{self.api_base}/deploys/{deploy_id}/files{rel_path}"
+                    upload_headers = {
+                        "Authorization": f"Bearer {self.auth_token}",
+                        "Content-Type": "application/octet-stream",
+                    }
+                    resp = requests.put(upload_url, headers=upload_headers, data=content)
+                    resp.raise_for_status()
+                    logger.info(f"Uploaded: {rel_path}")
+
+            # Step 3: Wait for deploy to be ready
+            return self._wait_for_deploy(deploy_id)
 
         except Exception as e:
             logger.error(f"API deployment failed: {e}")
