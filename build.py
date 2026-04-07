@@ -74,17 +74,104 @@ class DashboardBuilder:
         except Exception as e:
             logger.error(f"Error saving history: {e}")
 
+    # ---- Data normalization helpers ----
+    # Collectors return their own schemas; these methods transform them
+    # into the canonical format that aggregate_data() and the template expect.
+
+    def _normalize_reddit(self, raw: Dict) -> Dict:
+        """Normalize reddit_collector output -> build.py schema"""
+        mentions = []
+        for m in raw.get("mentions", []):
+            mentions.append({
+                "platform": "Reddit",
+                "text": f"{m.get('title', '')} {m.get('body', '')}".strip(),
+                "sentiment": m.get("sentiment", {}).get("polarity", 0)
+                             if isinstance(m.get("sentiment"), dict)
+                             else m.get("sentiment", 0),
+                "date": m.get("date", ""),
+                "author": m.get("author", ""),
+            })
+        return {
+            "mentions": mentions,
+            "platform": "Reddit",
+            "data_points": len(mentions),
+        }
+
+    def _normalize_trends(self, raw: Dict) -> Dict:
+        """Normalize trends_collector output -> build.py schema"""
+        return {
+            "raw": {
+                "dates": raw.get("dates", []),
+                "keywords": raw.get("keyword_data", {}),
+            },
+            "rising": raw.get("rising_queries", []),
+            "platform": "Google Trends",
+            "data_points": len(raw.get("dates", [])),
+        }
+
+    def _normalize_meta(self, raw: Dict) -> Dict:
+        """Normalize meta_ads_collector output -> build.py schema"""
+        kpis = raw.get("aggregate_kpis", {})
+        return {
+            "daily": raw.get("daily_data", []),
+            "campaigns": raw.get("campaigns", []),
+            "metrics": {
+                "total_spend": kpis.get("spend", 0),
+                "purchases": kpis.get("purchases", 0),
+                "cpa": kpis.get("cpa", 0),
+                "roas": kpis.get("roas", 0),
+                "ctr": kpis.get("ctr", 0),
+            },
+            "platform": "Meta Ads",
+            "data_points": len(raw.get("daily_data", [])),
+        }
+
+    def _normalize_youtube(self, raw: Dict) -> Dict:
+        """Normalize youtube_collector output -> build.py schema"""
+        mentions = []
+        for v in raw.get("videos", []):
+            mentions.append({
+                "platform": "YouTube",
+                "text": v.get("title", ""),
+                "sentiment": 0,  # YouTube collector doesn't provide sentiment
+                "date": v.get("date", ""),
+                "author": v.get("channel", ""),
+            })
+        return {
+            "mentions": mentions,
+            "platform": "YouTube",
+            "data_points": len(mentions),
+        }
+
+    def _normalize_trustpilot(self, raw: Dict) -> Dict:
+        """Normalize trustpilot_collector output -> build.py schema"""
+        feedback = []
+        for r in raw.get("reviews", []):
+            feedback.append({
+                "author": r.get("reviewer_name", "Anonymous"),
+                "date": r.get("date", ""),
+                "text": r.get("text", ""),
+                "rating": r.get("rating", 3),
+            })
+        return {
+            "feedback": feedback,
+            "platform": "Trustpilot",
+            "data_points": len(feedback),
+        }
+
+    # ---- Collector methods ----
+
     def collect_reddit_data(self) -> Dict:
         """Collect data from Reddit collector"""
         if not ENABLED_COLLECTORS.get("reddit", True):
             return self._empty_reddit_data()
 
         try:
-            from collectors.reddit_collector import RedditCollector
-            collector = RedditCollector()
-            data = collector.collect()
-            logger.info(f"Collected {len(data.get('mentions', []))} mentions from Reddit")
-            return data
+            from collectors.reddit_collector import collect as reddit_collect
+            raw = reddit_collect()
+            normalized = self._normalize_reddit(raw)
+            logger.info(f"Collected {normalized['data_points']} mentions from Reddit")
+            return normalized
         except Exception as e:
             logger.error(f"Reddit collection failed: {e}")
             return self._empty_reddit_data()
@@ -95,11 +182,11 @@ class DashboardBuilder:
             return self._empty_trends_data()
 
         try:
-            from collectors.trends_collector import TrendsCollector
-            collector = TrendsCollector()
-            data = collector.collect()
-            logger.info(f"Collected Google Trends data")
-            return data
+            from collectors.trends_collector import collect as trends_collect
+            raw = trends_collect()
+            normalized = self._normalize_trends(raw)
+            logger.info(f"Collected Google Trends data ({normalized['data_points']} data points)")
+            return normalized
         except Exception as e:
             logger.error(f"Google Trends collection failed: {e}")
             return self._empty_trends_data()
@@ -110,11 +197,11 @@ class DashboardBuilder:
             return self._empty_meta_data()
 
         try:
-            from collectors.meta_ads_collector import MetaAdsCollector
-            collector = MetaAdsCollector()
-            data = collector.collect()
-            logger.info(f"Collected Meta Ads data")
-            return data
+            from collectors.meta_ads_collector import collect as meta_collect
+            raw = meta_collect()
+            normalized = self._normalize_meta(raw)
+            logger.info(f"Collected Meta Ads data ({normalized['data_points']} daily records)")
+            return normalized
         except Exception as e:
             logger.error(f"Meta Ads collection failed: {e}")
             return self._empty_meta_data()
@@ -125,11 +212,11 @@ class DashboardBuilder:
             return self._empty_youtube_data()
 
         try:
-            from collectors.youtube_collector import YouTubeCollector
-            collector = YouTubeCollector()
-            data = collector.collect()
-            logger.info(f"Collected YouTube data")
-            return data
+            from collectors.youtube_collector import collect as youtube_collect
+            raw = youtube_collect()
+            normalized = self._normalize_youtube(raw)
+            logger.info(f"Collected {normalized['data_points']} videos from YouTube")
+            return normalized
         except Exception as e:
             logger.error(f"YouTube collection failed: {e}")
             return self._empty_youtube_data()
@@ -140,11 +227,11 @@ class DashboardBuilder:
             return self._empty_trustpilot_data()
 
         try:
-            from collectors.trustpilot_collector import TrustpilotCollector
-            collector = TrustpilotCollector()
-            data = collector.collect()
-            logger.info(f"Collected Trustpilot data")
-            return data
+            from collectors.trustpilot_collector import collect as trustpilot_collect
+            raw = trustpilot_collect()
+            normalized = self._normalize_trustpilot(raw)
+            logger.info(f"Collected {normalized['data_points']} reviews from Trustpilot")
+            return normalized
         except Exception as e:
             logger.error(f"Trustpilot collection failed: {e}")
             return self._empty_trustpilot_data()
@@ -653,6 +740,7 @@ class DashboardBuilder:
                 "sov": round((comp_mentions / len(mentions)) * 100, 1) if mentions else 0,
                 "sentiment_score": round(comp_sentiment, 3),
                 "positive_pct": comp_positive_pct,
+                "trend_change": 0,  # Requires historical data for comparison
             })
 
         return sorted(competitors, key=lambda x: x["mentions"], reverse=True)
